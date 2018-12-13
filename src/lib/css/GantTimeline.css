@@ -31,8 +31,20 @@
 	font-weight: 900;
 }
 
+.gt-extendable-start {
+	float: left;
+	height: 24px;
+    cursor: ew-resize;
+}
+
+.gt-extendable-end {
+	float: right;
+	height: 24px;
+    cursor: ew-resize;
+}
+
 .gt-timeline {
-	height: 26px;
+	height: 24px;
 }
 
 /* Left */
@@ -85,4 +97,5 @@
 	border: 1px solid grey;
 	display: inline-block;
 	height: 24px;
+	cursor: pointer
 }

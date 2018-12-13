@@ -21,13 +21,22 @@ class GantTimelineDemo {
           name: 'Phase3',
           groupName: 'TimelimeLibCreation',
           start: '11-20-2018',
-          end: '12-31-2018'
+          end: '01-12-2019'
+        },
+        {
+          name: 'Phase3',
+          groupName: 'TimelimeLibCreation',
+          start: '11-15-2018',
+          end: '01-13-2019'
         }
       ],
       scale: 'day',
       range: 30
     });
     libInstance.draw()
+    libInstance.on('onDayClick', function(data, date) {
+      alert(data.name + ': ' + date)
+    })
   }
 }
 

@@ -41,6 +41,17 @@ class GantTimeline {
 		this.monthFormat = options.monthFormat || 'MMM'
 		this.yearFormat = options.yearFormat || 'YYYY'
 		this.defaultData = this._getDefaultData()
+		this.triggers = {}
+	}
+
+	on(event, callback) {
+		this.triggers[event] = callback
+	}
+
+	_trigger(event, params) {
+		if (this.triggers[event]) {
+			this.triggers[event].apply(null, params);
+		}
 	}
 
 	// _getHeaderBy(type, format) {
@@ -98,6 +109,7 @@ class GantTimeline {
 			let nextStart = start.clone().add(1, 'day').startOf('day')
 			defaultData.push({
 				id: start.format('X'),
+				date: start.format('MM-DD-YYYY'),
 				year: start.format(this.yearFormat),
 				month: start.format(this.monthFormat),
 				day: start.format(this.dayFormat)
@@ -161,23 +173,29 @@ class GantTimeline {
 		return '<div class="gt-body">' + elements + '</div>'
 	}
 
-	_getBodyGrid(data, width) {
+	_getBodyGrid(line, data, width, extendable) {
 		let yearElements = ''
 		, groupedByYear = groupBy(data, 'year')
+
 		for (let year in groupedByYear) {
 			let monthElements = ''
 			, groupedByMonth = groupBy(groupedByYear[year], 'month')
+			
 			for (let month in groupedByMonth) {
 				let dayElements = ''
+
 				for (let day of groupedByMonth[month]) {
 					if (day.isStart) {
-						dayElements += '<div class="gt-body-cell-day start" style="width: ' + (this.lowerCellWidth - 2) + 'px">'
+						dayElements += '<div class="gt-body-cell-day start" data-line="' + line._id + '" data-value="' + day['date'] + '" style="width: ' + (this.lowerCellWidth - 2) + 'px">'
+						+ (extendable.start ? '<div class="gt-extendable-start" draggable="true" style="background-color: red; width: 10px"></div>' : '')
 						+ '<div class="gt-timeline" style="background-color: blue; width: ' + width + 'px"></div>'
 						+ '</div>'
 					} else if (day.isEnd) {
-						dayElements += '<div class="gt-body-cell-day end" style="width: ' + (this.lowerCellWidth - 2) + 'px"></div>'
+						dayElements += '<div class="gt-body-cell-day end" data-line="' + line._id + '" data-value="' + day['date'] + '" style="width: ' + (this.lowerCellWidth - 2) + 'px">'
+						+ (extendable.end ? '<div class="gt-extendable-end" draggable="true" style="background-color: red; width: 10px"></div>' : '')
+						+ '</div>'
 					} else {
-						dayElements += '<div class="gt-body-cell-day" style="width: ' + (this.lowerCellWidth - 2) + 'px"></div>'
+						dayElements += '<div class="gt-body-cell-day" data-line="' + line._id + '" data-value="' + day['date'] + '" style="width: ' + (this.lowerCellWidth - 2) + 'px"></div>'
 					}
 				}
 				monthElements += '<div class="gt-body-cell-month">' + dayElements + '</div>'
@@ -188,27 +206,32 @@ class GantTimeline {
 		return '<div class="gt-body-line" style="width: ' + (data.length * this.lowerCellWidth) + 'px">' + yearElements + '</div>'
 	}
 
-	_getTimeline(line) {
+	_getTimeline(line, isExtendable) {
 		if (!line.start || !line.end) return ''
 		let data = JSON.parse(JSON.stringify(this.defaultData))
 		, start = moment(line.start)
 		, end = moment(line.end)
 		, width = 0
+		, extendable = {start: isExtendable, end: isExtendable}
 
 		if (start.diff(this.globalEnd, 'days') < 0 && this.globalStart.diff(end, 'days') < 0) {
 			let idStart
 			, idEnd
 
-			if (start.diff(this.globalStart, 'days') > 0) {
+			if (start.diff(this.globalStart, 'seconds') >= 0) {
 				idStart = start.format('X')
 			} else {
 				idStart = this.globalStart.format('X')
+				extendable.start = false
 			}
 
-			if (this.globalEnd.diff(end, 'days') > 0) {
+			if (this.globalEnd.diff(end, 'seconds') > 0) {
 				idEnd = end.format('X')
+				width = ((idEnd - idStart) / 86400 + 1) * this.lowerCellWidth - 2
 			} else {
-				idEnd = this.globalEnd.format('X')
+				idEnd = parseInt(this.globalEnd.format('X')) + 1
+				width = (idEnd - idStart) / 86400 * this.lowerCellWidth - 2
+				extendable.end = false
 			}
 
 			data.map((e) => {
@@ -227,10 +250,9 @@ class GantTimeline {
 				return e
 			})
 
-			width = (idEnd - idStart) / 86400 * this.lowerCellWidth
 		}
 
-		return this._getBodyGrid(data, width)
+		return this._getBodyGrid(line, data, width, extendable)
 
 		// let start = moment(line.start)
 		// , end = moment(line.end)
@@ -261,6 +283,7 @@ class GantTimeline {
 
 	_getGroupTimeline(name, group) {
 		let elements = ''
+		, i = 1
 		, groupTimeline = {
 			name: name,
 			start: null,
@@ -269,27 +292,33 @@ class GantTimeline {
 		}
 
 		for (let line of group) {
+			line._id = line.groupName + i
 			if (!groupTimeline.start || moment(line.start).diff(group.start, 'day') < 0) {
 				groupTimeline.start = moment(line.start)
 			}
 			if (!groupTimeline.end || groupTimeline.end.diff(moment(line.end), 'day') < 0) {
 				groupTimeline.end = moment(line.end)
 			}
-			elements += this._getTimeline(line)
+			elements += this._getTimeline(line, true)
+			i++
 		}
 
-		return this._getTimeline(groupTimeline) + elements
+		return this._getTimeline(groupTimeline, false) + elements
 	}
 
 	_getRightBody() {
 		let elements = ''
 		, dataByGroup = groupBy(this.data, 'groupName')
+
 		for (let groupName in dataByGroup) {
 			if (groupName !== 'other') {
 				elements += this._getGroupTimeline(groupName, dataByGroup[groupName])
 			} else {
+				let i = 1
 				for (let line of dataByGroup[groupName]) {
-					elements += this._getTimeline(line)
+					line._id = groupName + i
+					elements += this._getTimeline(line, true)
+					i++
 				}
 			}
 		}
@@ -303,6 +332,20 @@ class GantTimeline {
 
 	_getRightContent() {
 		return this._getRightHeader() + this._getRightBody()
+	}
+
+	_createEvents() {
+		const self = this
+		, cells = document.getElementsByClassName("gt-body-cell-day")
+		for (let cell of cells) {
+			cell.onclick = function(e) {
+				e.preventDefault()
+				let data = self.data.find((e) => {
+					return e._id === cell.getAttribute('data-line')
+				})
+				self._trigger('onDayClick', [data, cell.getAttribute('data-value')])
+			}
+		}
 	}
 
 	draw() {
@@ -319,6 +362,8 @@ class GantTimeline {
 		rightContent.innerHTML = '<div class="gt-content gt-right-content">' + this._getRightContent() + '</div>'
 		container.appendChild(leftContent.firstChild)
 		container.appendChild(rightContent.firstChild)
+
+		this._createEvents()
 	}
 }
 
